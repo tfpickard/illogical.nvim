@@ -1,75 +1,96 @@
 -- illogical.lua
 local M = {}
 
--- Base mapping with lowercase keys.
-local toggle_map_base = {
-	["true"] = "false",
-	["false"] = "true",
-	["1"] = "0",
-	["0"] = "1",
-	["yes"] = "no",
-	["no"] = "yes",
+-- Define toggle pairs in a two-column format (only store lowercase)
+local toggle_pairs = {
+    { "true",   "false" },
+    { "yes",    "no" },
+    { "1",      "0" },
+    { "enable", "" },
 }
 
--- Adjust the case of the replacement to match the original word.
-local function adjust_case(word, replacement)
-	if word:upper() == word then
-		return replacement:upper() -- All letters uppercase.
-	elseif word:sub(1, 1):upper() == word:sub(1, 1) and word:sub(2):lower() == word:sub(2) then
-		-- Only the first letter is uppercase.
-		return replacement:sub(1, 1):upper() .. replacement:sub(2)
-	else
-		return replacement -- All lowercase (or other cases fallback).
-	end
+-- Function to match a word in the toggle table and return its counterpart
+local function get_toggle_value(word)
+    local lower_word = word:lower()
+    local replacement = nil
+
+    -- Look up the lowercase word in the toggle table
+    for _, pair in ipairs(toggle_pairs) do
+        if pair[1] == lower_word then
+            replacement = pair[2]
+            break
+        elseif pair[2] == lower_word then
+            replacement = pair[1]
+            break
+        end
+    end
+
+    if not replacement then
+        return nil
+    end -- No match found
+
+    -- Determine case style
+    local cap = false
+    local all_upper = true
+
+    for i = 1, #word do
+        local char = word:sub(i, i)
+        if char:match("%l") then -- Contains a lowercase letter
+            all_upper = false
+            break
+        end
+    end
+
+    if word:sub(1, 1):match("%u") then
+        cap = true
+    end
+
+    -- Apply correct case formatting
+    if all_upper then
+        return replacement:upper()                           -- ALL CAPS
+    elseif cap then
+        return replacement:sub(1, 1):upper() .. replacement:sub(2) -- Capitalized
+    else
+        return replacement                                   -- Lowercase
+    end
 end
 
--- Toggle function: Replace logical words using our base map.
+-- Toggle function: Replace logical words dynamically.
 M.toggle = function()
-	local cword = vim.fn.expand("<cword>")
-	local lower_word = cword:lower()
-	local base = toggle_map_base[lower_word]
-	if base then
-		local replacement = adjust_case(cword, base)
-		local row, col = unpack(vim.api.nvim_win_get_cursor(0))
-		local line = vim.api.nvim_get_current_line()
-		local start = col - #cword + 1
-		local before = line:sub(1, start - 1)
-		local after = line:sub(start + #cword)
-		vim.api.nvim_set_current_line(before .. replacement .. after)
-	else
-		print("No toggle found for '" .. cword .. "'")
-	end
-end
+    local cword = vim.fn.expand("<cword>")
+    local replacement = get_toggle_value(cword)
+    if not replacement then
+        print("No toggle found for '" .. cword .. "'")
+        return
+    end
 
--- Cycle function: Cycle "true" through "true" -> "True" -> "TRUE" -> "true".
-M.cycle = function()
-	local cword = vim.fn.expand("<cword>")
-	local cycle = { "true", "True", "TRUE" }
-	local idx = nil
-	for i, v in ipairs(cycle) do
-		if cword == v then
-			idx = i
-			break
-		end
-	end
-	if not idx then
-		print("Word is not in the cycle: '" .. cword .. "'")
-		return
-	end
-	local next_idx = (idx % #cycle) + 1
-	local replacement = cycle[next_idx]
-	local row, col = unpack(vim.api.nvim_win_get_cursor(0))
-	local line = vim.api.nvim_get_current_line()
-	local start = col - #cword + 1
-	local before = line:sub(1, start - 1)
-	local after = line:sub(start + #cword)
-	vim.api.nvim_set_current_line(before .. replacement .. after)
+    local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+    local line = vim.api.nvim_get_current_line()
+
+    -- Find the start and end of the word under the cursor
+    local start_col, end_col = col, col
+    while start_col > 1 and line:sub(start_col - 1, start_col - 1):match("[%w_]") do
+        start_col = start_col - 1
+    end
+    while end_col <= #line and line:sub(end_col, end_col):match("[%w_]") do
+        end_col = end_col + 1
+    end
+
+    -- Replace only the word at the cursor's position
+    local before = line:sub(1, start_col - 1)
+    local after = line:sub(end_col)
+    vim.api.nvim_set_current_line(before .. replacement .. after)
 end
 
 -- Set default keybindings.
--- <leader>` to toggle logical values.
--- <leader>~ to cycle through "true" variants.
-vim.api.nvim_set_keymap("n", "<leader>`", ":lua require('illogical').toggle()<CR>", { noremap = true, silent = true })
-vim.api.nvim_set_keymap("n", "<leader>~", ":lua require('illogical').cycle()<CR>", { noremap = true, silent = true })
+vim.api.nvim_set_keymap("n", "<leader>=", ":lua require('illogical').toggle()<CR>", { noremap = true, silent = true })
+
+-- Which-key support if installed.
+local has_which_key, which_key = pcall(require, "which-key")
+if has_which_key then
+    which_key.register({
+        ["<leader>`"] = "Toggle logical value",
+    })
+end
 
 return M
