@@ -333,12 +333,17 @@ M.ttoggle = function()
 end
 
 -- Set default keybinding: <leader>= toggles the logical word.
-vim.api.nvim_set_keymap("n", "<leader>=", ":lua require('illogical').toggle()<CR>", { noremap = true, silent = true })
+-- vim.api.nvim_set_keymap("n", "<leader>=", ":lua require('illogical').toggle()<CR>", { noremap = true, silent = true })
 
 local has_which_key, which_key = pcall(require, "which-key")
 if has_which_key then
-	which_key.register({
-		["<leader>="] = "Toggle logical value",
+	which_key.add({
+		{
+			"<leader>=",
+			":lua require('illogical').toggle()<CR>",
+			desc = "Toggle logical value",
+		},
+		-- ["<leader>="] = "Toggle logical value",
 	})
 end
 
